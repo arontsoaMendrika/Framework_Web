@@ -2,7 +2,7 @@
 
 # Définition des variables
 APP_NAME="framework"
-SRC_DIR="src/main/java/Controllers"
+SRC_DIR="src/main/java"
 WEB_DIR="src/main/webapp"
 BUILD_DIR="build"
 LIB_DIR="lib"
@@ -32,7 +32,6 @@ jar -cvf $FRAMEWORK_JAR .
 cd ../../../
 
 mv  $BUILD_DIR/WEB-INF/classes/$FRAMEWORK_JAR  $BUILD_DIR/WEB-INF/lib
-#rm -rf $BUILD_DIR/WEB-INF/classes/*
 
 # Copier les fichiers web (web.xml, JSP, etc.)
 cp -r $WEB_DIR/* $BUILD_DIR/
