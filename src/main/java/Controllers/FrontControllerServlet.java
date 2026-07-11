@@ -7,51 +7,23 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import main.java.util.Util; 
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.lang.reflect.Method;
 
 public class FrontControllerServlet extends HttpServlet {
-    private HashMap<String, Method> mappingUrls = new HashMap<>();
-    private List<Class<?>> controllers;
+
+    private HashMap<String, Method> mappingUrls;
 
     @Override
+    @SuppressWarnings("unchecked")
     public void init() throws ServletException {
         super.init();
-        try {
-            controllers = new ArrayList<>();
-            List<Class<?>> classes = Util.getClassesInPackage("main.java");
-            for (Class<?> clazz : classes) {
-                if (clazz.isAnnotationPresent(main.java.annotation.Controller.class)) {
-                    controllers.add(clazz);
-                    System.out.println("Controller trouvé" + clazz.getName());
-
-                    Method[] methods = clazz.getDeclaredMethods();
-                    for(Method method : methods) {
-                        if (method.isAnnotationPresent(main.java.annotation.UrlMapping.class)) {
-                            main.java.annotation.UrlMapping mapping = method.getAnnotation(main.java.annotation.UrlMapping.class);
-                            mappingUrls.put(mapping.value(), method);
-                        
-                            String cleRoute =mapping.method().name() + ":" + mapping.value();
-
-                            if(mappingUrls.containsKey(cleRoute)) {
-                                Method methodeExistante = mappingUrls.get(cleRoute);
-                                String messageErreur = String.format("Conflit de mapping d'URL pour la route : %s. Méthode existante : %s, Méthode conflictuelle : %s",
-                                        cleRoute, methodeExistante.getName(), method.getName());
-                                throw new ServletException(messageErreur);
-                            }
-                            mappingUrls.put(cleRoute, method);
-                            System.out.println("Mapping enregistré ->" + cleRoute);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new ServletException(e);
+        this.mappingUrls = (HashMap<String, Method>) getServletContext().getAttribute("tableRoutage");
+        if (this.mappingUrls == null) {
+            throw new ServletException("La table de routage n'a pas pu être récupérée du ServletContextListener !");
         }
+        System.out.println("Servlet prête et connectée à la table de routage.");
     }
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
