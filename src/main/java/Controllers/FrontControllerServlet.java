@@ -12,7 +12,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.util.HashMap;
 import java.util.Map;
 import java.lang.reflect.Method;
-import main.java.util.ModelAndView; 
+
+import main.java.util.ModelAndView;
+import main.java.annotation.RestAPI; // 👈 1. Importation de l'annotation RestAPI
+import com.google.gson.Gson;
 
 public class FrontControllerServlet extends HttpServlet {
 
@@ -37,7 +40,6 @@ public class FrontControllerServlet extends HttpServlet {
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        response.setContentType("text/html;charset=UTF-8");
         
         String uri = request.getRequestURI();
         String contextPath = request.getContextPath();
@@ -53,7 +55,34 @@ public class FrontControllerServlet extends HttpServlet {
             try {
                 Object controleurInstance = clazz.getDeclaredConstructor().newInstance();
                 
+                // Exécution du contrôleur
                 Object resultatInvocation = method.invoke(controleurInstance);
+
+                if (method.isAnnotationPresent(RestAPI.class)) {
+                    response.setContentType("application/json;charset=UTF-8");
+                    
+                    String jsonResponse = "";
+                    
+                    // Application de la consigne : String direct, sinon toJson
+                    if (resultatInvocation instanceof String) {
+                        jsonResponse = (String) resultatInvocation;
+                    } else {
+                        Gson gson = new Gson();
+                        if(resultatInvocation instanceof ModelAndView) {
+                            ModelAndView mv = (ModelAndView) resultatInvocation;
+                            jsonResponse = gson.toJson(mv.getModel());
+                        } else {
+                            jsonResponse = gson.toJson(resultatInvocation);
+                        }
+                    }
+                    try (PrintWriter out = response.getWriter()) {
+                        out.print(jsonResponse);
+                    }
+                    return; // Fin du traitement (pas de redirection JSP)
+                }
+
+                // SPRINT 5 : Traitement classique avec rendu JSP
+                response.setContentType("text/html;charset=UTF-8");
 
                 if (resultatInvocation instanceof ModelAndView) {
                     ModelAndView mv = (ModelAndView) resultatInvocation;
@@ -64,7 +93,7 @@ public class FrontControllerServlet extends HttpServlet {
                     }
                     String cheminJsp = this.prefix + mv.getViewName() + this.suffix;
 
-                  RequestDispatcher dispatcher = request.getServletContext().getRequestDispatcher(cheminJsp);
+                    RequestDispatcher dispatcher = request.getServletContext().getRequestDispatcher(cheminJsp);
 
                     if (dispatcher != null) {
                         dispatcher.forward(request, response);
@@ -85,6 +114,7 @@ public class FrontControllerServlet extends HttpServlet {
                 throw new ServletException("Erreur lors de l'exécution de la méthode " + method.getName() + "()", e);
             }
         } else {
+            response.setContentType("text/html;charset=UTF-8");
             try (PrintWriter out = response.getWriter()) {
                 out.println("<html><body>");
                 out.println("<h1>URI: " + uri + "</h1>");
@@ -93,6 +123,46 @@ public class FrontControllerServlet extends HttpServlet {
             }
         }
     }
+
+    // private String toJson(Object obj) {
+    //     if (obj instanceof ModelAndView) {
+    //         ModelAndView mv = (ModelAndView) obj;
+    //         return mapToJson(mv.getModel());
+    //     } else if (obj instanceof Map) {
+    //         return mapToJson((Map<String, Object>) obj);
+    //     }
+    //     return "{}";
+    // }
+
+    // @SuppressWarnings("unchecked")
+    // private String mapToJson(Map<String, Object> map) {
+    //     if (map == null || map.isEmpty()) {
+    //         return "{}";
+    //     }
+        
+    //     StringBuilder json = new StringBuilder();
+    //     json.append("{");
+        
+    //     int i = 0;
+    //     for (Map.Entry<String, Object> entry : map.entrySet()) {
+    //         json.append("\"").append(entry.getKey()).append("\":");
+            
+    //         Object val = entry.getValue();
+    //         if (val instanceof Number || val instanceof Boolean) {
+    //             json.append(val);
+    //         } else {
+    //             json.append("\"").append(val != null ? val.toString() : "null").append("\"");
+    //         }
+            
+    //         if (i < map.size() - 1) {
+    //             json.append(",");
+    //         }
+    //         i++;
+    //     }
+        
+    //     json.append("}");
+    //     return json.toString();
+    // }
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)

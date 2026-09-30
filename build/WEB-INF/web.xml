@@ -1,17 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<web-app xmlns="http://java.sun.com/xml/ns/j2ee"
-xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee
-http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd"
-version="2.4">
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
+         version="6.0">
 
-<servlet>
-<servlet-name>FrontControllerServlet</servlet-name>
-<servlet-class>FrontControllerServlet</servlet-class>
-</servlet>
+    <servlet>
+        <servlet-name>FrontControllerServlet</servlet-name>
+        <!-- 1. Indiquer le nom complet de la classe avec son package -->
+        <servlet-class>main.java.Controllers.FrontControllerServlet</servlet-class>
+        
+        <!-- Parameters de configuration du suffixe/préfixe -->
+        <init-param>
+            <param-name>prefix</param-name>
+            <param-value>/</param-value>
+        </init-param>
+        <init-param>
+            <param-value>.jsp</param-value>
+            <param-name>suffix</param-name>
+        </init-param>
+    </servlet>
 
-<servlet-mapping>
-<servlet-name>FrontControllerServlet</servlet-name>
-<url-pattern>/*/</url-pattern>
-</servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>FrontControllerServlet</servlet-name>
+        <!-- 2. Utiliser /* ou / pour intercepter toutes les URLs -->
+        <url-pattern>/*</url-pattern>
+    </servlet-mapping>
+
 </web-app>
