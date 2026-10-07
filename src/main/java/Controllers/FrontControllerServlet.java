@@ -52,13 +52,69 @@ public class FrontControllerServlet extends HttpServlet {
             Method method = mappingUrls.get(cleRecherchee);
             Class<?> clazz = method.getDeclaringClass();
 
-            try {
-                Object controleurInstance = clazz.getDeclaredConstructor().newInstance();
-                
-                // Exécution du contrôleur
-                Object resultatInvocation = method.invoke(controleurInstance);
+       try {
+    Object controleurInstance = clazz.getDeclaredConstructor().newInstance();
+    
+    // SPRINT 7 : BINDING DES PARAMÈTRES (AVEC @RequestParam SUR LA MÉTHODE)
+    
+    java.lang.reflect.Parameter[] parameters = method.getParameters();
+    Object[] parameterValues = new Object[parameters.length];
 
-                if (method.isAnnotationPresent(RestAPI.class)) {
+    // Parcours de chaque paramètre de la méthode
+    for (int i = 0; i < parameters.length; i++) {
+        java.lang.reflect.Parameter param = parameters[i];
+        String paramName = param.getName(); // maka anle paramatre ex: "nom", "age"
+        Class<?> paramType = param.getType();
+
+        String requestValue = null;
+
+        // Si le paramètre est annoté avec @RequestParam
+        if (param.isAnnotationPresent(main.java.annotation.RequestParam.class)) {
+            requestValue = request.getParameter(paramName);
+        }
+
+        // Conversion du type String vers le type cible du paramètre Java
+        if (requestValue != null && !requestValue.trim().isEmpty()) {
+            try {
+                if (paramType == int.class || paramType == Integer.class) {
+                    parameterValues[i] = Integer.parseInt(requestValue);
+                } else if (paramType == double.class || paramType == Double.class) {
+                    parameterValues[i] = Double.parseDouble(requestValue);
+                } else if (paramType == boolean.class || paramType == Boolean.class) {
+                    parameterValues[i] = Boolean.parseBoolean(requestValue);
+                } else {
+                    parameterValues[i] = requestValue; 
+                }
+            } catch (NumberFormatException e) {
+                // Gestion des erreurs de conversion
+                if (paramType == int.class) {
+                    parameterValues[i] = 0;
+                } else if (paramType == double.class) {
+                    parameterValues[i] = 0.0;
+                } else if (paramType == boolean.class) {
+                    parameterValues[i] = false;
+                } else {
+                    parameterValues[i] = null;
+                }
+            }
+        } else {
+            // Valeurs par défaut si le paramètre est absent de la requête
+            if (paramType == int.class) {
+                parameterValues[i] = 0;
+            } else if (paramType == double.class) {
+                parameterValues[i] = 0.0;
+            } else if (paramType == boolean.class) {
+                parameterValues[i] = false;
+            } else {
+                parameterValues[i] = null;
+            }
+        }
+    }
+
+    // Exécution dynamique avec le tableau de paramètres rempli
+    Object resultatInvocation = method.invoke(controleurInstance, parameterValues);
+    
+    if (method.isAnnotationPresent(RestAPI.class)) {
                     response.setContentType("application/json;charset=UTF-8");
                     
                     String jsonResponse = "";

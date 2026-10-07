@@ -24,7 +24,7 @@ find $SRC_DIR -name "*.java" > sources.txt
 chmod +r sources.txt
 echo "source="
 cat sources.txt
-javac -cp "$SERVLET_API_JAR:$GSON_JAR" -d $BUILD_DIR/WEB-INF/classes @sources.txt
+javac -parameters -cp "$SERVLET_API_JAR:$GSON_JAR" -d $BUILD_DIR/WEB-INF/classes @sources.txt
 rm sources.txt
 
 cp "$GSON_JAR" "$BUILD_DIR/WEB-INF/lib/"
