@@ -1,52 +1,27 @@
 #!/bin/bash
 
 # Définition des variables
-APP_NAME="framework"
 SRC_DIR="src/main/java"
-WEB_DIR="src/main/webapp"
 BUILD_DIR="build"
-LIB_DIR="lib"
-TOMCAT_WEBAPPS="/Users/mendrika/Documents/TOMCAT/webapps"
-SERVLET_API_JAR="$LIB_DIR/servlet-api.jar"
+TOMCAT_HOME="/home/mandresy/Documents/tomcat9"
+SERVLET_API_JAR="$TOMCAT_HOME/lib/servlet-api.jar"
 FRAMEWORK_JAR="framework-web.jar"
 
 # Nettoyage et création du répertoire temporaire
-rm -rf $BUILD_DIR
-mkdir -p $BUILD_DIR
-cp -r $WEB_DIR/* $BUILD_DIR
-
-mkdir -p $BUILD_DIR/WEB-INF/classes
-mkdir -p $BUILD_DIR/WEB-INF/lib
+rm -rf "$BUILD_DIR" "$FRAMEWORK_JAR" sources.txt
+mkdir -p "$BUILD_DIR/classes"
 
 # Compilation des fichiers Java avec le JAR des Servlets
-find $SRC_DIR -name "*.java" > sources.txt
-chmod +r sources.txt
-echo "source="
-cat sources.txt
-javac -cp "$SERVLET_API_JAR" -d $BUILD_DIR/WEB-INF/classes @sources.txt
-rm sources.txt
+find "$SRC_DIR" -type f -name '*.java' ! -name '._*' > sources.txt
+javac --release 8 -cp "$SERVLET_API_JAR" -d "$BUILD_DIR/classes" @sources.txt
+rm -f sources.txt
 
-cd $BUILD_DIR/WEB-INF/classes
-jar -cvf $FRAMEWORK_JAR .
-
-cd ../../../
-
-mv  $BUILD_DIR/WEB-INF/classes/$FRAMEWORK_JAR  $BUILD_DIR/WEB-INF/lib
-
-# Copier les fichiers web (web.xml, JSP, etc.)
-cp -r $WEB_DIR/* $BUILD_DIR/
-
-# Générer le fichier .war dans le dossier build
-cd $BUILD_DIR || exit
-mv web.xml WEB-INF/ #le namoronana anle xml
-jar -cvf $APP_NAME.war *
-cd ..
-
-# Déploiement dans Tomcat
-cp -f $BUILD_DIR/$APP_NAME.war $TOMCAT_WEBAPPS/
+jar -cf "$FRAMEWORK_JAR" -C "$BUILD_DIR/classes" .
+cp -f "$FRAMEWORK_JAR" "../sprint7/lib/$FRAMEWORK_JAR"
 
 echo ""
 
-echo "Déploiement terminé. Redémarrez Tomcat si nécessaire."
+echo "Framework compilé : $FRAMEWORK_JAR"
+echo "Copié dans ../sprint7/lib/"
 
 echo ""
