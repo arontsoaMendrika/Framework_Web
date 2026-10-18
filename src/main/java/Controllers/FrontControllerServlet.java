@@ -1,22 +1,19 @@
 package main.java.Controllers;
 
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.*;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.lang.reflect.Method;
 
-import main.java.util.ModelAndView;
-import main.java.annotation.RestAPI; // 👈 1. Importation de l'annotation RestAPI
+import main.java.util.*;
+import main.java.annotation.RestAPI;
 import com.google.gson.Gson;
 
+@jakarta.servlet.annotation.MultipartConfig
 public class FrontControllerServlet extends HttpServlet {
 
     private HashMap<String, Method> mappingUrls;
@@ -60,6 +57,41 @@ public class FrontControllerServlet extends HttpServlet {
         return value;
     }
 
+    private Object objectInObject(Class<?> clazz, HttpServletRequest request, String prefix) throws Exception {
+        Object instance = clazz.getDeclaredConstructor().newInstance();
+
+        for (java.lang.reflect.Field field : clazz.getDeclaredFields()) {
+            field.setAccessible(true);
+            Class<?> fieldType = field.getType();
+
+            String paramName = (prefix.isEmpty()) ? field.getName() : prefix + "." + field.getName();
+
+            if (isSimpleType(fieldType)) {
+                String fieldValue = request.getParameter(paramName);
+                if (fieldValue != null && !fieldValue.trim().isEmpty()) {
+                    field.set(instance, convertValue(fieldValue, fieldType));
+                }
+            } else {
+                Object nestedInstance = objectInObject(fieldType, request, paramName);
+                field.set(instance, nestedInstance);
+            }
+        }
+        return instance;
+    }
+
+    private String getUploadPath() {
+        Properties properties = new Properties();
+        try (InputStream input = getServletContext().getClassLoader().getResourceAsStream("upload.properties")) {
+            if (input != null) {
+                properties.load(input);
+                return properties.getProperty("upload.path");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return System.getProperty("java.io.tmpdir");
+    }
+
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
@@ -85,7 +117,6 @@ public class FrontControllerServlet extends HttpServlet {
                 // Parcours de chaque paramètre de la méthode
                 for (int i = 0; i < parameters.length; i++) {
                     java.lang.reflect.Parameter param = parameters[i];
-                    // String paramName = param.getName(); // maka anle paramatre ex: "nom", "age"
                     Class<?> paramType = param.getType();
 
                     if (isSimpleType(paramType)) {
@@ -97,7 +128,6 @@ public class FrontControllerServlet extends HttpServlet {
                             requestValue = request.getParameter(paramName);
                         }
 
-                        // Conversion du type String vers le type cible du paramètre Java
                         if (requestValue != null && !requestValue.trim().isEmpty()) {
                             try {
                                 if (paramType == int.class || paramType == Integer.class) {
@@ -110,7 +140,6 @@ public class FrontControllerServlet extends HttpServlet {
                                     parameterValues[i] = requestValue;
                                 }
                             } catch (NumberFormatException e) {
-                                // Gestion des erreurs de conversion
                                 if (paramType == int.class) {
                                     parameterValues[i] = 0;
                                 } else if (paramType == double.class) {
@@ -122,7 +151,6 @@ public class FrontControllerServlet extends HttpServlet {
                                 }
                             }
                         } else {
-                            // Valeurs par défaut si le paramètre est absent de la requête
                             if (paramType == int.class) {
                                 parameterValues[i] = 0;
                             } else if (paramType == double.class) {
@@ -133,25 +161,79 @@ public class FrontControllerServlet extends HttpServlet {
                                 parameterValues[i] = null;
                             }
                         }
-                    } else {
-                        try {
-                            // Pour les types Objets
-                            Object objetInstance = paramType.getDeclaredConstructor().newInstance();
-                            for (java.lang.reflect.Field field : paramType.getDeclaredFields()) {
-                                field.setAccessible(true);
-                                String fieldName = field.getName();
-                                String fieldValue = request.getParameter(fieldName);
-
-                                if (fieldValue != null && !fieldValue.trim().isEmpty()) {
-                                    Object convertedValue = convertValue(fieldValue, field.getType());
-                                    field.set(objetInstance, convertedValue);
-                                }
+                    }
+                    else if (param.getType().equals(MapFile.class)) {
+                        Part filePart = request.getPart(param.getName());
+                        if (filePart != null && filePart.getSize() > 0) {
+                            String submittedFileName = filePart.getSubmittedFileName();
+                            String extension = "";
+                            int j = submittedFileName.lastIndexOf('.');
+                            if (j > 0) {
+                                extension = submittedFileName.substring(j + 1);
                             }
-                            parameterValues[i] = objetInstance;
+                            byte[] bytes = filePart.getInputStream().readAllBytes();
 
+                            String uploadPath = getUploadPath();
+                            File uploadDir = new File(uploadPath);
+                            if (!uploadDir.exists())
+                                uploadDir.mkdirs();
+
+                            File fileToSave = new File(uploadDir, submittedFileName);
+                            filePart.write(fileToSave.getAbsolutePath());
+
+                            MapFile mapFile = new MapFile();
+                            mapFile.setNom(submittedFileName);
+                            mapFile.setExtension(extension);
+                            mapFile.setBytes(bytes);
+
+                            parameterValues[i] = mapFile;
+                        } else {
+                            parameterValues[i] = null;
+                        }
+                    }
+                    else if (param.getType().isArray() || List.class.isAssignableFrom(param.getType())) {
+                        Collection<Part> parts = request.getParts();
+                        List<MapFile> mapFiles = new ArrayList<>();
+
+                        for (Part filePart : parts) {
+                            if (filePart.getName().equals(param.getName()) && filePart.getSize() > 0) {
+                                String submittedFileName = filePart.getSubmittedFileName();
+                                String extension = "";
+                                int j = submittedFileName.lastIndexOf('.');
+                                if (j > 0) {
+                                    extension = submittedFileName.substring(j + 1);
+                                }
+                                byte[] bytes = filePart.getInputStream().readAllBytes();
+
+                                String uploadPath = getUploadPath();
+                                File uploadDir = new File(uploadPath);
+                                if (!uploadDir.exists())
+                                    uploadDir.mkdirs();
+
+                                File fileToSave = new File(uploadDir, submittedFileName);
+                                filePart.write(fileToSave.getAbsolutePath());
+
+                                MapFile mapFile = new MapFile();
+                                mapFile.setNom(submittedFileName);
+                                mapFile.setExtension(extension);
+                                mapFile.setBytes(bytes);
+
+                                mapFiles.add(mapFile);
+                            }
+                        }
+
+                        if (param.getType().isArray()) {
+                            parameterValues[i] = mapFiles.toArray(new MapFile[0]);
+                        } else {
+                            parameterValues[i] = mapFiles;
+                        }
+                    } else {
+                        // Objets dans objets
+                        try {
+                            parameterValues[i] = objectInObject(paramType, request, "");
                         } catch (Exception e) {
                             throw new ServletException(
-                                    "Erreur lors du binding de l'objet POJO : " + paramType.getName(), e);
+                                    "Erreur lors du binding de l'objet : " + paramType.getName(), e);
                         }
                     }
                 }
@@ -225,46 +307,6 @@ public class FrontControllerServlet extends HttpServlet {
             }
         }
     }
-
-    // private String toJson(Object obj) {
-    // if (obj instanceof ModelAndView) {
-    // ModelAndView mv = (ModelAndView) obj;
-    // return mapToJson(mv.getModel());
-    // } else if (obj instanceof Map) {
-    // return mapToJson((Map<String, Object>) obj);
-    // }
-    // return "{}";
-    // }
-
-    // @SuppressWarnings("unchecked")
-    // private String mapToJson(Map<String, Object> map) {
-    // if (map == null || map.isEmpty()) {
-    // return "{}";
-    // }
-
-    // StringBuilder json = new StringBuilder();
-    // json.append("{");
-
-    // int i = 0;
-    // for (Map.Entry<String, Object> entry : map.entrySet()) {
-    // json.append("\"").append(entry.getKey()).append("\":");
-
-    // Object val = entry.getValue();
-    // if (val instanceof Number || val instanceof Boolean) {
-    // json.append(val);
-    // } else {
-    // json.append("\"").append(val != null ? val.toString() : "null").append("\"");
-    // }
-
-    // if (i < map.size() - 1) {
-    // json.append(",");
-    // }
-    // i++;
-    // }
-
-    // json.append("}");
-    // return json.toString();
-    // }
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
