@@ -114,6 +114,8 @@ public class FrontControllerServlet extends HttpServlet {
                 java.lang.reflect.Parameter[] parameters = method.getParameters();
                 Object[] parameterValues = new Object[parameters.length];
 
+                MySession sessionToSync = null;
+
                 // Parcours de chaque paramètre de la méthode
                 for (int i = 0; i < parameters.length; i++) {
                     java.lang.reflect.Parameter param = parameters[i];
@@ -161,8 +163,7 @@ public class FrontControllerServlet extends HttpServlet {
                                 parameterValues[i] = null;
                             }
                         }
-                    }
-                    else if (param.getType().equals(MapFile.class)) {
+                    } else if (param.getType().equals(MapFile.class)) {
                         Part filePart = request.getPart(param.getName());
                         if (filePart != null && filePart.getSize() > 0) {
                             String submittedFileName = filePart.getSubmittedFileName();
@@ -190,8 +191,7 @@ public class FrontControllerServlet extends HttpServlet {
                         } else {
                             parameterValues[i] = null;
                         }
-                    }
-                    else if (param.getType().isArray() || List.class.isAssignableFrom(param.getType())) {
+                    } else if (param.getType().isArray() || List.class.isAssignableFrom(param.getType())) {
                         Collection<Part> parts = request.getParts();
                         List<MapFile> mapFiles = new ArrayList<>();
 
@@ -227,6 +227,12 @@ public class FrontControllerServlet extends HttpServlet {
                         } else {
                             parameterValues[i] = mapFiles;
                         }
+                    } // SPRINT 9 : GESTION DE LA SESSION
+                    else if (param.getType().equals(MySession.class)) {
+                        HttpSession nativeSession = request.getSession(true);
+                        sessionToSync = new MySession(nativeSession);
+                        parameterValues[i] = sessionToSync;
+
                     } else {
                         // Objets dans objets
                         try {
@@ -236,10 +242,15 @@ public class FrontControllerServlet extends HttpServlet {
                                     "Erreur lors du binding de l'objet : " + paramType.getName(), e);
                         }
                     }
+
                 }
                 // Exécution dynamique avec le tableau de paramètres rempli
                 Object resultatInvocation = method.invoke(controleurInstance, parameterValues);
 
+                if (sessionToSync != null) {
+                    sessionToSync.syncToHttpSession();
+                }
+                
                 if (method.isAnnotationPresent(RestAPI.class)) {
                     response.setContentType("application/json;charset=UTF-8");
 
