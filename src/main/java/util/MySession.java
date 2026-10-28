@@ -8,11 +8,16 @@ import java.util.Map;
 import java.util.Set;
 
 public class MySession {
-    private final HttpSession httpSession;
+    private HttpSession httpSession;
     private final Map<String, Object> map = new HashMap<>();
 
     public MySession(HttpSession httpSession) {
+        bind(httpSession);
+    }
+
+    public synchronized void bind(HttpSession httpSession) {
         this.httpSession = httpSession;
+        map.clear();
         if (httpSession != null) {
             Enumeration<String> attributeNames = httpSession.getAttributeNames();
             while (attributeNames.hasMoreElements()) {
@@ -22,31 +27,30 @@ public class MySession {
         }
     }
 
-    public void add(String key, Object value) {
+    public synchronized void add(String key, Object value) {
         if (key == null) {
             throw new IllegalArgumentException("La clé d'un attribut de session ne peut pas être null.");
         }
         map.put(key, value);
     }
 
-    public Object get(String key) {
+    public synchronized Object get(String key) {
         return map.get(key);
     }
 
-    public void delete(String key) {
+    public synchronized void delete(String key) {
         map.remove(key);
     }
 
-    public boolean contains(String key) {
+    public synchronized boolean contains(String key) {
         return map.containsKey(key);
     }
 
-    public String getId() {
+    public synchronized String getId() {
         return httpSession == null ? null : httpSession.getId();
     }
 
-    
-    public void syncToHttpSession() {
+    public synchronized void syncToHttpSession() {
         if (httpSession == null) {
             return;
         }

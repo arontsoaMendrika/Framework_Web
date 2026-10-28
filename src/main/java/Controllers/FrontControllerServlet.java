@@ -7,11 +7,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.*;
 
 import java.util.*;
+
 import java.lang.reflect.Method;
 
 import main.java.util.*;
 import main.java.annotation.RestAPI;
 import com.google.gson.Gson;
+import main.java.annotation.Authenticated;
+import main.java.annotation.Role;
 
 @jakarta.servlet.annotation.MultipartConfig
 public class FrontControllerServlet extends HttpServlet {
@@ -19,6 +22,8 @@ public class FrontControllerServlet extends HttpServlet {
     private HashMap<String, Method> mappingUrls;
     private String prefix;
     private String suffix;
+    private String authKey;
+    private String roleKey;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -28,6 +33,17 @@ public class FrontControllerServlet extends HttpServlet {
 
         this.prefix = getServletConfig().getInitParameter("prefix");
         this.suffix = getServletConfig().getInitParameter("suffix");
+        this.authKey = getServletConfig().getInitParameter("authKey");
+        this.roleKey = getServletConfig().getInitParameter("roleKey");
+
+        if (this.authKey == null)
+            this.authKey = "user";
+        if (this.roleKey == null)
+            this.roleKey = "role";
+        // Sprint 9 : si le listener n'a pas créé l'ApplicationContext, on le crée ici
+        if (getServletContext().getAttribute("applicationContext") == null) {
+            getServletContext().setAttribute("applicationContext", new ApplicationContext());
+        }
 
         if (this.mappingUrls == null) {
             throw new ServletException("La table de routage n'a pas pu être récupérée du ServletContextListener !");
@@ -92,6 +108,66 @@ public class FrontControllerServlet extends HttpServlet {
         return System.getProperty("java.io.tmpdir");
     }
 
+    private boolean checkAccess(Method method, HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        Class<?> clazz = method.getDeclaringClass();
+
+        Role role = method.isAnnotationPresent(Role.class)
+                ? method.getAnnotation(Role.class)
+                : clazz.getAnnotation(Role.class);
+
+        boolean needAuth = role != null
+                || method.isAnnotationPresent(Authenticated.class)
+                || clazz.isAnnotationPresent(Authenticated.class);
+
+        if (!needAuth)
+            return true; // méthode publique
+
+        HttpSession session = request.getSession(false); // false : ne pas créer de session
+        if (session == null || session.getAttribute(authKey) == null) {
+            sendAccessError(method, response, 401, "Authentification requise");
+            return false;
+        }
+
+        if (role != null && !hasRole(session.getAttribute(roleKey), role.value())) {
+            sendAccessError(method, response, 403, "Acces refuse : role insuffisant");
+            return false;
+        }
+        return true;
+    }
+
+    private boolean hasRole(Object userRole, String[] allowed) {
+        if (userRole == null)
+            return false;
+        List<String> userRoles = new ArrayList<>();
+        if (userRole instanceof String[]) {
+            userRoles.addAll(Arrays.asList((String[]) userRole));
+        } else if (userRole instanceof Collection) {
+            for (Object o : (Collection<?>) userRole)
+                userRoles.add(String.valueOf(o));
+        } else {
+            userRoles.add(userRole.toString());
+        }
+        for (String r : allowed) {
+            for (String u : userRoles) {
+                if (r.equalsIgnoreCase(u.trim()))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private void sendAccessError(Method method, HttpServletResponse response,
+            int status, String message) throws IOException {
+        response.setStatus(status);
+        if (method.isAnnotationPresent(RestAPI.class)) {
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().print("{\"error\": \"" + message + "\"}");
+        } else {
+            response.sendError(status, message);
+        }
+    }
+
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
@@ -105,6 +181,10 @@ public class FrontControllerServlet extends HttpServlet {
         if (mappingUrls.containsKey(cleRecherchee)) {
             Method method = mappingUrls.get(cleRecherchee);
             Class<?> clazz = method.getDeclaringClass();
+
+            if (!checkAccess(method, request, response)) {
+                return;
+            }
 
             try {
                 Object controleurInstance = clazz.getDeclaredConstructor().newInstance();
@@ -229,9 +309,17 @@ public class FrontControllerServlet extends HttpServlet {
                         }
                     } // SPRINT 9 : GESTION DE LA SESSION
                     else if (param.getType().equals(MySession.class)) {
-                        HttpSession nativeSession = request.getSession(true);
-                        sessionToSync = new MySession(nativeSession);
+                        HttpSession nativeSession = request.getSession(true); // avant l'écriture de la réponse
+                        ApplicationContext appCtx = (ApplicationContext) getServletContext()
+                                .getAttribute("applicationContext");
+                        sessionToSync = appCtx.getOrCreate(nativeSession);
                         parameterValues[i] = sessionToSync;
+
+                    } else if (HttpServletRequest.class.isAssignableFrom(paramType)) {
+                        parameterValues[i] = request;
+
+                    } else if (HttpServletResponse.class.isAssignableFrom(paramType)) {
+                        parameterValues[i] = response;
 
                     } else {
                         // Objets dans objets
@@ -244,13 +332,16 @@ public class FrontControllerServlet extends HttpServlet {
                     }
 
                 }
-                // Exécution dynamique avec le tableau de paramètres rempli
-                Object resultatInvocation = method.invoke(controleurInstance, parameterValues);
-
-                if (sessionToSync != null) {
-                    sessionToSync.syncToHttpSession();
+                Object resultatInvocation;
+                try {
+                    resultatInvocation = method.invoke(controleurInstance, parameterValues);
+                } finally {
+                    // Reporte la session dans la vraie HttpSession, même en cas d'exception
+                    if (sessionToSync != null) {
+                        sessionToSync.syncToHttpSession();
+                    }
                 }
-                
+
                 if (method.isAnnotationPresent(RestAPI.class)) {
                     response.setContentType("application/json;charset=UTF-8");
 
